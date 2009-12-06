@@ -31,6 +31,7 @@ from google.appengine.ext import db
 from django.utils import simplejson
 from google.appengine.api import urlfetch
 import datetime
+import logging
 
 
 _TWITTER_PROPERTIES = frozenset(['id', 'name', 'screen_name', 'created_at',
@@ -112,16 +113,19 @@ def create_image_from_normal_url(normal):
 
   result = urlfetch.fetch(normal)
   if result.status_code != 200:
+    logging.error(normal)
     return None
   normal_blob = db.Blob(result.content)
 
   result = urlfetch.fetch(original)
   if result.status_code != 200:
+    logging.error(original)
     return None
   original_blob = db.Blob(result.content)
 
   result = urlfetch.fetch(bigger)
   if result.status_code != 200:
+    logging.error(bigger)
     return None
   bigger_blob = db.Blob(result.content)
 
@@ -141,6 +145,7 @@ class UserHandler(webapp.RequestHandler):
     result = urlfetch.fetch(url)
     if result.status_code != 200:
       # TODO: error handling.
+      logging.error("Cannot fetch profile for id %s" % (id))
       return
 
     remote_profile = create_profile_from_json(result.content)
@@ -169,6 +174,7 @@ class FriendHandler(webapp.RequestHandler):
     result = urlfetch.fetch(url)
     if result.status_code != 200:
       # TODO: error handling.
+      logging.error("Cannot fetch friends for id %s" % (id))
       return
 
     friends = simplejson.loads(result.content)
