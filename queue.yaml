@@ -1,0 +1,6 @@
+queue:
+- name: find-friends
+  rate: 10/s
+
+- name: query-status
+  rate: 10/s
