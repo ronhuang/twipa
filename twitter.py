@@ -32,6 +32,7 @@ from google.appengine.api import urlfetch
 import datetime
 import logging
 import tweepy
+from google.appengine.runtime import DeadlineExceededError
 
 
 _BLOB_MAXIMUM_SIZE = 10485760
@@ -103,15 +104,22 @@ class Profile(db.Model):
 
 
 def get_image_blob(url):
-  result = urlfetch.fetch(url)
-  if result.status_code != 200:
-    logging.warning("Cannot fetch image %s" % url)
+  result = None
+
+  try:
+    result = urlfetch.fetch(url)
+    if result is None or result.status_code != 200:
+      logging.warning("Cannot fetch image %s" % url)
+      return
+  except DeadlineExceededError, e:
+    logging.error("Cannot fetch image %s" % url)
+    logging.error(e)
     return
 
   length = _BLOB_MAXIMUM_SIZE + 1
   try:
     length = int(result.headers['Content-Length'])
-  except TypeError as e:
+  except TypeError:
     logging.error("Content-Length is invalid %s" % result.headers['Content-Length'])
     return
 
@@ -206,7 +214,7 @@ class UserHandler(webapp.RequestHandler):
     try:
       user = api.get_user(id=id)
       add_profile(user)
-    except tweepy.TweepError as e:
+    except tweepy.TweepError:
       r = api.rate_limit_status()
       if r.remaining_hits == 0:
         logging.error("Hourly limit reached %s/%s" % (r.remaining_hits, r.hourly_limit))
@@ -222,7 +230,7 @@ class FriendHandler(webapp.RequestHandler):
     try:
       for user in tweepy.Cursor(api.friends, id=id).items():
         add_profile(user)
-    except tweepy.TweepError as e:
+    except tweepy.TweepError:
       r = api.rate_limit_status()
       if r.remaining_hits == 0:
         logging.error("Hourly limit reached %s/%s" % (r.remaining_hits, r.hourly_limit))
