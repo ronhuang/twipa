@@ -34,11 +34,7 @@ import logging
 import tweepy
 
 
-_TWITTER_PROPERTIES = frozenset(['id', 'name', 'screen_name', 'created_at',
-                                 'location', 'description', 'url',
-                                 'followers_count', 'friends_count',
-                                 'favourites_count', 'statuses_count',
-                                 'profile_image_url'])
+_BLOB_MAXIMUM_SIZE = 10485760
 
 auth = tweepy.BasicAuthHandler('profiletimeline', '')
 api = tweepy.API(auth)
@@ -75,14 +71,55 @@ class Profile(db.Model):
     # Profile without modified_at field is always newer.
     diff = 0
 
-    for p in _TWITTER_PROPERTIES:
-      if self[p] != other[p]:
-        diff += 1
+    if self.id != other.id:
+      diff += 1
+    if self.name != other.name:
+      diff += 1
+    if self.screen_name != other.screen_name:
+      diff += 1
+    if self.created_at != other.created_at:
+      diff += 1
+    if self.location != other.location:
+      diff += 1
+    if self.description != other.description:
+      diff += 1
+    if self.url != other.url:
+      diff += 1
+    if self.followers_count != other.followers_count:
+      diff += 1
+    if self.friends_count != other.friends_count:
+      diff += 1
+    if self.favourites_count != other.favourites_count:
+      diff += 1
+    if self.statuses_count != other.statuses_count:
+      diff += 1
+    if self.profile_image_url != other.profile_image_url:
+      diff += 1
 
     if other.modified_at is None or other.modified_at >= self.modified_at:
       return diff
     else:
       return -diff
+
+
+def get_image_blob(url):
+  result = urlfetch.fetch(url)
+  if result.status_code != 200:
+    logging.warning("Cannot fetch image %s" % url)
+    return
+
+  length = _BLOB_MAXIMUM_SIZE + 1
+  try:
+    length = int(result.headers['Content-Length'])
+  except TypeError as e:
+    logging.error("Content-Length is invalid %s" % result.headers['Content-Length'])
+    return
+
+  if length > _BLOB_MAXIMUM_SIZE:
+    logging.warning("Image %s too large %s" % (url, length))
+    return
+
+  return db.Blob(result.content)
 
 
 def add_image(normal):
@@ -111,23 +148,9 @@ def add_image(normal):
     original = base + ext
     bigger = base + '_bigger' + ext
 
-    result = urlfetch.fetch(normal)
-    if result.status_code == 200:
-      normal_blob = db.Blob(result.content)
-    else:
-      logging.warning("Cannot fetch image %s" % normal)
-
-    result = urlfetch.fetch(original)
-    if result.status_code == 200:
-      original_blob = db.Blob(result.content)
-    else:
-      logging.warning("Cannot fetch image %s" % original)
-
-    result = urlfetch.fetch(bigger)
-    if result.status_code == 200:
-      bigger_blob = db.Blob(result.content)
-    else:
-      logging.warning("Cannot fetch image %s" % bigger)
+    original_blob = get_image_blob(original)
+    normal_blob = get_image_blob(normal)
+    bigger_blob = get_image_blob(bigger)
 
   image = Image(
     original = original_blob,
