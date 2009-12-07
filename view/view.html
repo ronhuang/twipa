@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>View user</title>
+  </head>
+  <body>
+    <h1>View user</h1>
+
+    {% for profile in profiles %}
+    <div>
+      <img src="/profile_image/{{ profile.id }}/latest/normal"
+           alt="{{ profile.name }}" width="48" height="48"/>
+      <span>{{ profile.name }}</span>
+    </div>
+    {% endfor %}
+  </body>
+</html>

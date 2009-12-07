@@ -12,5 +12,8 @@ handlers:
   script: $PYTHON_LIB/google/appengine/ext/deferred/deferred.py
   login: admin
 
+- url: /profile_image/.*
+  script: main.py
+
 - url: .*
   script: main.py

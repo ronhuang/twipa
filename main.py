@@ -29,6 +29,11 @@ from google.appengine.ext.webapp import util
 import os
 from google.appengine.ext.webapp import template
 from google.appengine.api.labs import taskqueue
+from models import Profile
+import logging
+
+
+_AVAILABLE_SIZES = frozenset(['original', 'bigger', 'normal'])
 
 
 class MainHandler(webapp.RequestHandler):
@@ -56,10 +61,79 @@ class TrackHandler(webapp.RequestHandler):
     self.redirect('/track')
 
 
+class ViewHandler(webapp.RequestHandler):
+
+  def get(self):
+    profiles = Profile.all()
+
+    template_values = {
+      'profiles': profiles,
+      'dummy': 'Hello',
+      }
+
+    path = os.path.join(os.path.dirname(__file__), 'view', 'view.html')
+    self.response.out.write(template.render(path, template_values))
+
+
+class ImageHandler(webapp.RequestHandler):
+
+  def get(self):
+    path = self.request.path[len('/profile_image/'):]
+    sid, revision, size = path.split('/')
+    id = 0
+
+    try:
+      id = int(sid)
+    except TypeError:
+      logging.error("ID incorrect %s" % sid)
+      self.error(404)
+      return
+
+    if size not in _AVAILABLE_SIZES:
+      logging.warning("id:%s, revision:%s, size:%s" % (id, revision, size))
+      self.error(404)
+      return
+
+    # TODO: handle revision
+
+    q = Profile.gql("WHERE id = :id "
+                    "ORDER BY modified_at DESC",
+                    id=id)
+    p = q.get()
+
+    if p is None or p.image is None:
+      logging.warning("id:%s, revision:%s, size:%s" % (id, revision, size))
+      self.error(404)
+      return
+
+    i = p.image
+    blob = None
+    if size in 'original':
+      blob = i.original
+    elif size in 'bigger':
+      blob = i.bigger
+    elif size in 'normal':
+      blob = i.normal
+
+    if blob is None:
+      # Default pictures doesn't have original.
+      blob = i.normal
+
+    if blob is None:
+      logging.warning("C id:%s, revision:%s, size:%s" % (id, revision, size))
+      self.error(404)
+      return
+
+    self.response.headers['Content-Type'] = 'image/jpeg'
+    self.response.out.write(blob)
+
+
 def main():
   actions = [
       ('/', MainHandler),
       ('/track', TrackHandler),
+      ('/view', ViewHandler),
+      (r'/profile_image/.*', ImageHandler),
       ]
   application = webapp.WSGIApplication(actions, debug=True)
   util.run_wsgi_app(application)
