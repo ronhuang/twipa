@@ -15,3 +15,9 @@ indexes:
   - name: id
   - name: modified_at
     direction: desc
+
+- kind: Profile
+  properties:
+  - name: profile_image_url
+  - name: modified_at
+    direction: desc
