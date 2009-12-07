@@ -29,7 +29,6 @@ from google.appengine.ext.webapp import util
 import os
 from google.appengine.ext.webapp import template
 from google.appengine.api.labs import taskqueue
-import twitter
 
 
 class MainHandler(webapp.RequestHandler):
@@ -48,9 +47,10 @@ class TrackHandler(webapp.RequestHandler):
     id = self.request.get('id')
 
     if len(id) > 0:
-      twitter.request_user_status(id)
+      t = taskqueue.Task(url='/twitter/get-user-status', params={'id': id})
+      taskqueue.Queue('twitter').add(t)
 
-      t = taskqueue.Task(url='/twitter/get-friends-ids', params={'id': id})
+      t = taskqueue.Task(url='/twitter/get-friends-statuses', params={'id': id})
       taskqueue.Queue('twitter').add(t)
 
     self.redirect('/track')

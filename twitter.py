@@ -28,10 +28,10 @@ from google.appengine.ext import webapp
 from google.appengine.ext.webapp import util
 from google.appengine.api.labs import taskqueue
 from google.appengine.ext import db
-from django.utils import simplejson
 from google.appengine.api import urlfetch
 import datetime
 import logging
+import tweepy
 
 
 _TWITTER_PROPERTIES = frozenset(['id', 'name', 'screen_name', 'created_at',
@@ -40,18 +40,8 @@ _TWITTER_PROPERTIES = frozenset(['id', 'name', 'screen_name', 'created_at',
                                  'favourites_count', 'statuses_count',
                                  'profile_image_url'])
 
-requested_user_statuses = set()
-
-
-def request_user_status(id):
-  # check if already requested
-  if id in requested_user_statuses:
-    return
-
-  t = taskqueue.Task(url='/twitter/get-user-status', params={'id': id})
-  taskqueue.Queue('twitter').add(t)
-
-  requested_user_statuses.add(id)
+auth = tweepy.BasicAuthHandler('profiletimeline', '')
+api = tweepy.API(auth)
 
 
 class Image(db.Model):
@@ -95,29 +85,7 @@ class Profile(db.Model):
       return -diff
 
 
-def create_profile_from_json(raw):
-  data = simplejson.loads(raw)
-
-  profile = Profile(
-    id = data['id'],
-    name = data['name'],
-    screen_name = data['screen_name'],
-    # Sat Dec 05 22:32:04 +0000 2009
-    created_at = datetime.datetime.strptime(data['created_at'], "%a %b %d %H:%M:%S +0000 %Y"),
-    location = data['location'],
-    description = data['description'],
-    url = data['url'],
-    followers_count = data['followers_count'],
-    friends_count = data['friends_count'],
-    favourites_count = data['favourites_count'],
-    statuses_count = data['statuses_count'],
-    profile_image_url = db.Link(data['profile_image_url']),
-    )
-
-  return profile
-
-
-def create_image_from_normal_url(normal):
+def add_image(normal):
   # Check if the image already exist in database.
   query = Profile.gql("WHERE profile_image_url = :piu "
                       "ORDER BY modified_at DESC",
@@ -171,80 +139,78 @@ def create_image_from_normal_url(normal):
   return image
 
 
-def query_rate_limit():
-  url = "http://twitter.com/account/rate_limit_status.json"
-  remaining_hits = 0
-  hourly_limit = 0
+def create_profile(user):
+  profile = Profile(
+    id = user.id,
+    name = user.name,
+    screen_name = user.screen_name,
+    created_at = user.created_at,
+    location = user.location,
+    description = user.description,
+    url = user.url,
+    followers_count = user.followers_count,
+    friends_count = user.friends_count,
+    favourites_count = user.favourites_count,
+    statuses_count = user.statuses_count,
+    profile_image_url = db.Link(user.profile_image_url),
+    )
 
-  result = urlfetch.fetch(url)
-  if result.status_code == 200:
-    data = simplejson.loads(result.content)
-    remaining_hits = data['remaining_hits']
-    hourly_limit = data['hourly_limit']
+  return profile
 
-  return remaining_hits, hourly_limit
+
+def add_profile(user):
+  remote_profile = create_profile(user)
+
+  query = Profile.gql("WHERE id = :id "
+                      "ORDER BY modified_at DESC",
+                      id=user.id)
+  local_profile = query.get()
+
+  if local_profile is None or local_profile != remote_profile:
+    # Populate image reference
+    image = add_image(remote_profile.profile_image_url)
+
+    remote_profile.image = image
+    remote_profile.modified_at = datetime.datetime.utcnow()
+    remote_profile.put()
 
 
 class UserHandler(webapp.RequestHandler):
 
   def post(self):
     id = self.request.get('id')
-    url = "http://twitter.com/users/show.json?id=%s" % (id)
 
-    result = urlfetch.fetch(url)
-    if result.status_code != 200:
-      rh, hl = query_rate_limit()
-      if rh == 0:
-        logging.error("Hourly limit reached %s/%s" % (rh, hl))
+    try:
+      user = api.get_user(id=id)
+      add_profile(user)
+    except tweepy.TweepError as e:
+      r = api.rate_limit_status()
+      if r.remaining_hits == 0:
+        logging.error("Hourly limit reached %s/%s" % (r.remaining_hits, r.hourly_limit))
       else:
         logging.error("Cannot fetch profile for id %s" % (id))
-
-      requested_user_statuses.discard(id)
-      return
-
-    remote_profile = create_profile_from_json(result.content)
-
-    query = Profile.gql("WHERE id = :id "
-                        "ORDER BY modified_at DESC",
-                        id=id)
-    local_profile = query.get()
-
-    if local_profile is None or local_profile != remote_profile:
-      # Populate image reference
-      image = create_image_from_normal_url(remote_profile.profile_image_url)
-
-      remote_profile.image = image
-      remote_profile.modified_at = datetime.datetime.utcnow()
-      remote_profile.put()
-
-    requested_user_statuses.discard(id)
 
 
 class FriendHandler(webapp.RequestHandler):
 
   def post(self):
     id = self.request.get('id')
-    url = "http://twitter.com/friends/ids/%s.json" % (id)
 
-    result = urlfetch.fetch(url)
-    if result.status_code != 200:
-      rh, hl = query_rate_limit()
-      if rh == 0:
-        logging.error("Hourly limit reached %s/%s" % (rh, hl))
+    try:
+      for user in tweepy.Cursor(api.friends, id=id).items():
+        add_profile(user)
+    except tweepy.TweepError as e:
+      r = api.rate_limit_status()
+      if r.remaining_hits == 0:
+        logging.error("Hourly limit reached %s/%s" % (r.remaining_hits, r.hourly_limit))
       else:
         logging.error("Cannot fetch friends for id %s" % (id))
-
-      return
-
-    friends_ids = simplejson.loads(result.content)
-    for fi in friends_ids:
-      request_user_status(fi)
 
 
 def main():
   actions = [
       ('/twitter/get-user-status', UserHandler),
-      ('/twitter/get-friends-ids', FriendHandler),
+      ('/twitter/get-friends-statuses', FriendHandler),
       ]
   application = webapp.WSGIApplication(actions, debug=True)
   util.run_wsgi_app(application)
