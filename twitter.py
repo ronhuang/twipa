@@ -29,7 +29,9 @@ from google.appengine.ext.webapp import util
 import logging
 import tweepy
 from google.appengine.ext import deferred
+from google.appengine.api.labs import taskqueue
 from models import get_image_blob, add_image, create_profile, add_profile, monitor_profile
+from models import Monitor
 import sensitive
 
 
@@ -71,10 +73,26 @@ class FriendHandler(webapp.RequestHandler):
         logging.error("Cannot fetch friends for id %s" % (id))
 
 
+class MonitorHandler(webapp.RequestHandler):
+
+  def get(self):
+    q = taskqueue.Queue('twitter')
+
+    for m in Monitor.all():
+      id = m.profile_id
+
+      t = taskqueue.Task(url='/twitter/get-user-status', params={'id': id})
+      q.add(t)
+
+      t = taskqueue.Task(url='/twitter/get-friends-statuses', params={'id': id})
+      q.add(t)
+
+
 def main():
   actions = [
       ('/twitter/get-user-status', UserHandler),
       ('/twitter/get-friends-statuses', FriendHandler),
+      ('/twitter/monitor-users-statuses', MonitorHandler),
       ]
   application = webapp.WSGIApplication(actions, debug=True)
   util.run_wsgi_app(application)
