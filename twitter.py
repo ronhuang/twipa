@@ -118,35 +118,57 @@ def create_profile_from_json(raw):
 
 
 def create_image_from_normal_url(normal):
-  ext = normal[len(normal)-4:] # assuming the extension has only 3 characters
-  base = normal[:len(normal)-len('_normal.xxx')]
+  # Check if the image already exist in database.
+  query = Profile.gql("WHERE profile_image_url = :piu "
+                      "ORDER BY modified_at DESC",
+                      piu=normal)
+  profile = query.get()
+  if profile is not None and profile.image:
+    return profile.image
 
-  original = base + ext
-  bigger = base + '_bigger' + ext
+  # New image, add to database.
+  original_blob, normal_blob, bigger_blob = None, None, None
 
-  result = urlfetch.fetch(normal)
-  if result.status_code != 200:
-    logging.error(normal)
-    return None
-  normal_blob = db.Blob(result.content)
+  dot_index = normal.rfind('.')
+  ext = normal[dot_index:]
 
-  result = urlfetch.fetch(original)
-  if result.status_code != 200:
-    logging.error(original)
-    return None
-  original_blob = db.Blob(result.content)
+  normal_index = normal.rfind('_normal.')
+  if (0 <= len('_normal') - dot_index) or (-1 == normal_index):
+    # Unusual image url.
+    logging.warning("Unusual image URL %s" % (normal))
+  else:
+    # Retrieve all version of the profile images.
+    base = normal[:normal_index]
 
-  result = urlfetch.fetch(bigger)
-  if result.status_code != 200:
-    logging.error(bigger)
-    return None
-  bigger_blob = db.Blob(result.content)
+    original = base + ext
+    bigger = base + '_bigger' + ext
 
-  return Image(
+    result = urlfetch.fetch(normal)
+    if result.status_code == 200:
+      normal_blob = db.Blob(result.content)
+    else:
+      logging.warning("Cannot fetch image %s" % normal)
+
+    result = urlfetch.fetch(original)
+    if result.status_code == 200:
+      original_blob = db.Blob(result.content)
+    else:
+      logging.warning("Cannot fetch image %s" % original)
+
+    result = urlfetch.fetch(bigger)
+    if result.status_code == 200:
+      bigger_blob = db.Blob(result.content)
+    else:
+      logging.warning("Cannot fetch image %s" % bigger)
+
+  image = Image(
     original = original_blob,
     normal = normal_blob,
     bigger = bigger_blob,
     )
+  image.put()
+
+  return image
 
 
 def query_rate_limit():
@@ -190,7 +212,6 @@ class UserHandler(webapp.RequestHandler):
     if local_profile is None or local_profile != remote_profile:
       # Populate image reference
       image = create_image_from_normal_url(remote_profile.profile_image_url)
-      image.put()
 
       remote_profile.image = image
       remote_profile.modified_at = datetime.datetime.utcnow()
