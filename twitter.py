@@ -33,11 +33,12 @@ import datetime
 import logging
 import tweepy
 from google.appengine.runtime import DeadlineExceededError
+import sensitive
 
 
 _BLOB_MAXIMUM_SIZE = 10485760
 
-auth = tweepy.BasicAuthHandler('profiletimeline', '')
+auth = tweepy.BasicAuthHandler(sensitive.username, sensitive.password)
 api = tweepy.API(auth)
 
 
