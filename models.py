@@ -96,6 +96,10 @@ class Profile(db.Model):
       return -diff
 
 
+class Monitor(db.Model):
+  profile_id = db.IntegerProperty(required=True)
+
+
 def get_image_blob(url):
   result = None
 
@@ -197,3 +201,16 @@ def add_profile(user):
     remote_profile.image = image
     remote_profile.modified_at = datetime.datetime.utcnow()
     remote_profile.put()
+
+    return remote_profile
+  else:
+    return local_profile
+
+
+def monitor_profile(profile):
+  query = Monitor.gql("WHERE profile_id = :id",
+                      id=profile.id)
+
+  if query.get() is None:
+    m = Monitor(profile_id = profile.id)
+    m.put()

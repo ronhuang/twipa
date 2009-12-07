@@ -29,7 +29,7 @@ from google.appengine.ext.webapp import util
 import logging
 import tweepy
 from google.appengine.ext import deferred
-from models import get_image_blob, add_image, create_profile, add_profile
+from models import get_image_blob, add_image, create_profile, add_profile, monitor_profile
 import sensitive
 
 
@@ -44,7 +44,8 @@ class UserHandler(webapp.RequestHandler):
 
     try:
       user = api.get_user(id=id)
-      add_profile(user)
+      p = add_profile(user)
+      monitor_profile(p)
     except tweepy.TweepError:
       r = api.rate_limit_status()
       if r.remaining_hits == 0:
