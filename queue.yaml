@@ -1,6 +1,4 @@
 queue:
-- name: find-friends
-  rate: 10/s
-
-- name: query-status
-  rate: 10/s
+- name: twitter
+  rate: 150/h
+  bucket_size: 50

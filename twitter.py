@@ -40,6 +40,19 @@ _TWITTER_PROPERTIES = frozenset(['id', 'name', 'screen_name', 'created_at',
                                  'favourites_count', 'statuses_count',
                                  'profile_image_url'])
 
+requested_user_statuses = set()
+
+
+def request_user_status(id):
+  # check if already requested
+  if id in requested_user_statuses:
+    return
+
+  t = taskqueue.Task(url='/twitter/get-user-status', params={'id': id})
+  taskqueue.Queue('twitter').add(t)
+
+  requested_user_statuses.add(id)
+
 
 class Image(db.Model):
   original = db.BlobProperty()
@@ -136,6 +149,20 @@ def create_image_from_normal_url(normal):
     )
 
 
+def query_rate_limit():
+  url = "http://twitter.com/account/rate_limit_status.json"
+  remaining_hits = 0
+  hourly_limit = 0
+
+  result = urlfetch.fetch(url)
+  if result.status_code == 200:
+    data = simplejson.loads(result.content)
+    remaining_hits = data['remaining_hits']
+    hourly_limit = data['hourly_limit']
+
+  return remaining_hits, hourly_limit
+
+
 class UserHandler(webapp.RequestHandler):
 
   def post(self):
@@ -144,8 +171,13 @@ class UserHandler(webapp.RequestHandler):
 
     result = urlfetch.fetch(url)
     if result.status_code != 200:
-      # TODO: error handling.
-      logging.error("Cannot fetch profile for id %s" % (id))
+      rh, hl = query_rate_limit()
+      if rh == 0:
+        logging.error("Hourly limit reached %s/%s" % (rh, hl))
+      else:
+        logging.error("Cannot fetch profile for id %s" % (id))
+
+      requested_user_statuses.discard(id)
       return
 
     remote_profile = create_profile_from_json(result.content)
@@ -164,6 +196,8 @@ class UserHandler(webapp.RequestHandler):
       remote_profile.modified_at = datetime.datetime.utcnow()
       remote_profile.put()
 
+    requested_user_statuses.discard(id)
+
 
 class FriendHandler(webapp.RequestHandler):
 
@@ -173,14 +207,17 @@ class FriendHandler(webapp.RequestHandler):
 
     result = urlfetch.fetch(url)
     if result.status_code != 200:
-      # TODO: error handling.
-      logging.error("Cannot fetch friends for id %s" % (id))
+      rh, hl = query_rate_limit()
+      if rh == 0:
+        logging.error("Hourly limit reached %s/%s" % (rh, hl))
+      else:
+        logging.error("Cannot fetch friends for id %s" % (id))
+
       return
 
-    friends = simplejson.loads(result.content)
-    q = taskqueue.Queue('query-status')
-    for f in friends:
-      q.add(taskqueue.Task(url='/twitter/get-user-status', params={'id': f}))
+    friends_ids = simplejson.loads(result.content)
+    for fi in friends_ids:
+      request_user_status(fi)
 
 
 def main():
