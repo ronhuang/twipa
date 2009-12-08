@@ -133,19 +133,22 @@ def add_image(normal):
                       "ORDER BY modified_at DESC",
                       piu=normal)
   profile = query.get()
+  # FIXME: maybe additional checks?
   if profile is not None and profile.image:
     return profile.image
 
   # New image, add to database.
-  original_blob, normal_blob, bigger_blob = None, None, None
-
   dot_index = normal.rfind('.')
   ext = normal[dot_index:]
 
   normal_index = normal.rfind('_normal.')
   if (0 <= len('_normal') - dot_index) or (-1 == normal_index):
-    # Unusual image url.
+    # Unusual image url, use same URL for all image...
     logging.warning("Unusual image URL %s" % (normal))
+
+    original_blob = get_image_blob(normal)
+    normal_blob = get_image_blob(normal)
+    bigger_blob = get_image_blob(normal)
   else:
     # Retrieve all version of the profile images.
     base = normal[:normal_index]
