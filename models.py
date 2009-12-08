@@ -26,19 +26,22 @@
 
 from google.appengine.ext import db
 from google.appengine.api import urlfetch
-import datetime
+from datetime import datetime
 import logging
 from google.appengine.runtime import DeadlineExceededError
 from google.appengine.api.urlfetch import DownloadError
+from urlparse import urlsplit
 
 
-_BLOB_MAXIMUM_SIZE = 10485760
+_BLOB_MAXIMUM_SIZE = 10485760 - 1024 # reserve 1K for others
 
 
 class Image(db.Model):
-  original = db.BlobProperty()
-  normal = db.BlobProperty()
-  bigger = db.BlobProperty()
+  name = db.StringProperty(required=True)
+  modified_at = db.DateTimeProperty(required=True)
+  url = db.LinkProperty(required=True)
+  content_type = db.StringProperty(required=True)
+  content = db.BlobProperty(required=True)
 
 
 class Profile(db.Model):
@@ -57,7 +60,10 @@ class Profile(db.Model):
   profile_image_url = db.LinkProperty()
 
   # My properties.
-  image = db.ReferenceProperty(Image)
+  original_image = db.ReferenceProperty(Image, collection_name="profile_original_set")
+  bigger_image = db.ReferenceProperty(Image, collection_name="profile_bigger_set")
+  normal_image = db.ReferenceProperty(Image, collection_name="profile_normal_set")
+  mini_image = db.ReferenceProperty(Image, collection_name="profile_mini_set")
   modified_at = db.DateTimeProperty()
 
 
@@ -101,7 +107,38 @@ class Monitor(db.Model):
   profile_id = db.IntegerProperty(required=True)
 
 
-def get_image_blob(url):
+def add_image(url):
+  # Get image information (HEAD)
+  try:
+    result = urlfetch.fetch(url, method=urlfetch.HEAD)
+  except (DeadlineExceededError, DownloadError), e:
+    logging.error("Failed to retrieve information for image %s" % url)
+    logging.error(e)
+    return
+
+  if result.status_code != 200:
+    logging.warning("Failed to retrieve information for image %s" % url)
+    return
+
+  try:
+    str = result.headers['Last-Modified'] # Thu, 17 Sep 2009 16:33:10 GMT
+    last_modified = datetime.strptime(str, '%a, %d %b %Y %H:%M:%S GMT')
+  except:
+    logging.error("Cannot parse Last-Modified from image %s" % url)
+    return
+
+  # Check if already exist.
+  q = Image.gql("WHERE url = :url "
+                "AND modified_at = :date",
+                url=url, date=last_modified)
+  image = q.get()
+
+  # Return if image already exist in datastore.
+  if image:
+    return image
+
+  # Image doesn't exist, create new one.
+  # First retrieve the content of the image.
   try:
     result = urlfetch.fetch(url)
   except (DeadlineExceededError, DownloadError), e:
@@ -116,58 +153,68 @@ def get_image_blob(url):
   length = _BLOB_MAXIMUM_SIZE + 1
   try:
     length = int(result.headers['Content-Length'])
-  except TypeError:
-    logging.error("Content-Length is invalid %s" % result.headers['Content-Length'])
+  except:
+    logging.error("Cannot parse Content-Length from image %s" % url)
     return
 
   if length > _BLOB_MAXIMUM_SIZE:
     logging.warning("Image %s too large %s" % (url, length))
     return
 
-  return db.Blob(result.content)
+  # Parse name of the image.
+  try:
+    path = urlsplit(url).path.split('/')
+    name = path[len(path) - 1]
+  except:
+    logging.error("Failed to parse name for image %s" % url)
+    return
+
+  # Create new Image
+  image = Image(
+    name = name,
+    modified_at = last_modified,
+    url = url,
+    content_type = result.headers['Content-Type'],
+    content = db.Blob(result.content),
+    )
+
+  try:
+    image.put()
+  except Exception, e:
+    logging.error("Failed to add image %s to datastore" % url)
+    logging.error(str(e))
+    return
+
+  return image
 
 
-def add_image(normal):
-  # Check if the image already exist in database.
-  query = Profile.gql("WHERE profile_image_url = :piu "
-                      "ORDER BY modified_at DESC",
-                      piu=normal)
-  profile = query.get()
-  # FIXME: maybe additional checks?
-  if profile is not None and profile.image:
-    return profile.image
-
-  # New image, add to database.
+def add_profile_images(normal):
   dot_index = normal.rfind('.')
   ext = normal[dot_index:]
-
   normal_index = normal.rfind('_normal.')
+
   if (0 <= len('_normal') - dot_index) or (-1 == normal_index):
     # Unusual image url, use same URL for all image...
     logging.warning("Unusual image URL %s" % (normal))
 
-    original_blob = get_image_blob(normal)
-    normal_blob = get_image_blob(normal)
-    bigger_blob = get_image_blob(normal)
+    original_image = add_image(normal)
+    bigger_image = add_image(normal)
+    normal_image = add_image(normal)
+    mini_image = add_image(normal)
   else:
     # Retrieve all version of the profile images.
     base = normal[:normal_index]
 
     original = base + ext
     bigger = base + '_bigger' + ext
+    mini = base + '_mini' + ext
 
-    original_blob = get_image_blob(original)
-    normal_blob = get_image_blob(normal)
-    bigger_blob = get_image_blob(bigger)
+    original_image = add_image(original)
+    bigger_image = add_image(bigger)
+    normal_image = add_image(normal)
+    mini_image = add_image(mini)
 
-  image = Image(
-    original = original_blob,
-    normal = normal_blob,
-    bigger = bigger_blob,
-    )
-  image.put()
-
-  return image
+  return original_image, bigger_image, normal_image, mini_image
 
 
 def create_profile(user):
@@ -199,11 +246,20 @@ def add_profile(user):
 
   if local_profile is None or local_profile != remote_profile:
     # Populate image reference
-    image = add_image(remote_profile.profile_image_url)
+    url = remote_profile.profile_image_url
+    (remote_profile.original_image,
+     remote_profile.bigger_image,
+     remote_profile.normal_image,
+     remote_profile.mini_image) = add_profile_images(url)
 
-    remote_profile.image = image
-    remote_profile.modified_at = datetime.datetime.utcnow()
-    remote_profile.put()
+    # Populate modified_at.
+    remote_profile.modified_at = datetime.utcnow()
+
+    try:
+      remote_profile.put()
+    except:
+      logging.error("Failed to add profile id:%s, screen_name:%s" % (user.id, user.screen_name))
+      return None
 
     return remote_profile
   else:
@@ -211,6 +267,9 @@ def add_profile(user):
 
 
 def monitor_profile(profile):
+  if profile is None:
+    return
+
   query = Monitor.gql("WHERE profile_id = :id",
                       id=profile.id)
 

@@ -33,9 +33,6 @@ from models import Profile
 import logging
 
 
-_AVAILABLE_SIZES = frozenset(['original', 'bigger', 'normal'])
-
-
 class MainHandler(webapp.RequestHandler):
 
   def get(self):
@@ -89,11 +86,6 @@ class ImageHandler(webapp.RequestHandler):
       self.error(404)
       return
 
-    if size not in _AVAILABLE_SIZES:
-      logging.warning("id:%s, revision:%s, size:%s" % (id, revision, size))
-      self.error(404)
-      return
-
     # TODO: handle revision
 
     q = Profile.gql("WHERE id = :id "
@@ -101,31 +93,37 @@ class ImageHandler(webapp.RequestHandler):
                     id=id)
     p = q.get()
 
-    if p is None or p.image is None:
-      logging.warning("id:%s, revision:%s, size:%s" % (id, revision, size))
+    if p is None:
+      logging.warning("Profile not exist. id:%s, revision:%s, size:%s" % (id, revision, size))
       self.error(404)
       return
 
-    i = p.image
-    blob = None
-    if size in 'original':
-      blob = i.original
-    elif size in 'bigger':
-      blob = i.bigger
-    elif size in 'normal':
-      blob = i.normal
+    if size == 'original':
+      image = p.original_image
+    elif size == 'bigger':
+      image = p.bigger_image
+    elif size == 'normal':
+      image = p.normal_image
+    elif size == 'mini':
+      image = p.mini_image
+    else:
+      logging.warning("Invalid size. id:%s, revision:%s, size:%s" % (id, revision, size))
+      self.error(404)
+      return
 
-    if blob is None:
-      # Default pictures doesn't have original.
-      blob = i.normal
+    if image is None:
+      # Try normal image is not found
+      image = p.normal_image
 
-    if blob is None:
+    if image is None:
+      # Return 404 if still not found
       logging.warning("C id:%s, revision:%s, size:%s" % (id, revision, size))
       self.error(404)
       return
 
-    self.response.headers['Content-Type'] = 'image/jpeg'
-    self.response.out.write(blob)
+    self.response.headers['Content-Type'] = image.content_type
+    self.response.headers['Content-Disposition'] = "filename=%s" % image.name
+    self.response.out.write(image.content)
 
 
 def main():

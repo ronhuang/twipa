@@ -30,7 +30,7 @@ import logging
 import tweepy
 from google.appengine.ext import deferred
 from google.appengine.api.labs import taskqueue
-from models import get_image_blob, add_image, create_profile, add_profile, monitor_profile
+from models import add_profile, monitor_profile
 from models import Monitor
 import sensitive
 
@@ -46,14 +46,16 @@ class UserHandler(webapp.RequestHandler):
 
     try:
       user = api.get_user(id=id)
-      p = add_profile(user)
-      monitor_profile(p)
     except tweepy.TweepError:
       r = api.rate_limit_status()
-      if r.remaining_hits == 0:
-        logging.error("Hourly limit reached %s/%s" % (r.remaining_hits, r.hourly_limit))
+      if r['remaining_hits'] == 0:
+        logging.error("Hourly limit reached %s/%s" % (r['remaining_hits'], r['hourly_limit']))
       else:
         logging.error("Cannot fetch profile for id %s" % (id))
+    else:
+      profile = add_profile(user)
+      if profile:
+        monitor_profile(profile)
 
 
 class FriendHandler(webapp.RequestHandler):
@@ -67,8 +69,8 @@ class FriendHandler(webapp.RequestHandler):
         deferred.defer(add_profile, user)
     except tweepy.TweepError:
       r = api.rate_limit_status()
-      if r.remaining_hits == 0:
-        logging.error("Hourly limit reached %s/%s" % (r.remaining_hits, r.hourly_limit))
+      if r['remaining_hits'] == 0:
+        logging.error("Hourly limit reached %s/%s" % (r['remaining_hits'], r['hourly_limit']))
       else:
         logging.error("Cannot fetch friends for id %s" % (id))
 
