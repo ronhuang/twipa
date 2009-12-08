@@ -8,6 +8,17 @@ import time
 
 from tweepy.parsers import parse_error
 from tweepy.error import TweepError
+from google.appengine.api.urlfetch import DownloadError
+
+
+class FakeHTTPResponse(object):
+
+    def __init__(self, status=500):
+        self.status = status
+
+    def read(self):
+        return '{"error":"This is FakeHTTPResponse"}'
+
 
 try:
     import simplejson as json
@@ -124,7 +135,11 @@ def bind_api(path, parser, allowed_param=[], method='GET', require_auth=False,
                 raise TweepError('Failed to send request: %s' % e)
 
             # Get response
-            resp = conn.getresponse()
+            try:
+                resp = conn.getresponse()
+            except DownloadError, e:
+                # Fake a HTTPResponse with status of 500.
+                resp = FakeHTTPResponse(500)
 
             # Exit request loop if non-retry error code
             if retry_errors is None:
