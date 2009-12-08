@@ -29,6 +29,7 @@ from google.appengine.api import urlfetch
 import datetime
 import logging
 from google.appengine.runtime import DeadlineExceededError
+from google.appengine.api.urlfetch import DownloadError
 
 
 _BLOB_MAXIMUM_SIZE = 10485760
@@ -101,16 +102,15 @@ class Monitor(db.Model):
 
 
 def get_image_blob(url):
-  result = None
-
   try:
     result = urlfetch.fetch(url)
-    if result is None or result.status_code != 200:
-      logging.warning("Cannot fetch image %s" % url)
-      return
-  except DeadlineExceededError, e:
+  except (DeadlineExceededError, DownloadError), e:
     logging.error("Cannot fetch image %s" % url)
     logging.error(e)
+    return
+
+  if result.status_code != 200:
+    logging.warning("Cannot fetch image %s" % url)
     return
 
   length = _BLOB_MAXIMUM_SIZE + 1
