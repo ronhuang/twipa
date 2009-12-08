@@ -62,7 +62,7 @@ class FriendHandler(webapp.RequestHandler):
     id = self.request.get('id')
 
     try:
-      for user in tweepy.Cursor(api.friends, id=id).items():
+      for user in tweepy.Cursor(api.friends, id=id, retry_count=3).items():
         # This may take a while, better defer them.
         deferred.defer(add_profile, user)
     except tweepy.TweepError:
