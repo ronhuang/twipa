@@ -104,7 +104,9 @@ class Profile(db.Model):
 
 
 class Monitor(db.Model):
-  profile_id = db.IntegerProperty(required=True)
+  profile = db.ReferenceProperty(Profile, required=True)
+  modified_at = db.DateTimeProperty(required=True, default=datetime.min)
+  explicit = db.BooleanProperty(required=True, default=False) # True if monitored explicitly.
 
 
 def add_image(url):
@@ -236,13 +238,15 @@ def create_profile(user):
   return profile
 
 
-def add_profile(user):
+def add_profile(user, explicit=False):
   remote_profile = create_profile(user)
 
   query = Profile.gql("WHERE id = :id "
                       "ORDER BY modified_at DESC",
                       id=user.id)
   local_profile = query.get()
+
+  profile = None # either the existing or the created profile.
 
   if local_profile is None or local_profile != remote_profile:
     # Populate image reference
@@ -259,20 +263,32 @@ def add_profile(user):
       remote_profile.put()
     except:
       logging.error("Failed to add profile id:%s, screen_name:%s" % (user.id, user.screen_name))
-      return None
+      return
 
-    return remote_profile
+    profile = remote_profile
   else:
-    return local_profile
+    profile = local_profile
 
-
-def monitor_profile(profile):
   if profile is None:
     return
 
-  query = Monitor.gql("WHERE profile_id = :id",
-                      id=profile.id)
+  # Monitor profile.
+  query = Monitor.gql("WHERE profile = :profile",
+                      profile=profile)
+  m = query.get()
 
-  if query.get() is None:
-    m = Monitor(profile_id = profile.id)
+  if m:
+    # update modified_at
+    m.modified_at = datetime.utcnow()
+    m.explicit = explicit
+  else:
+    m = Monitor(
+      profile = profile,
+      modified_at = datetime.utcnow(),
+      explicit = explicit,
+      )
+
+  try:
     m.put()
+  except:
+    logging.error("Failed to operate Monitor, id:%s" % profile.id)

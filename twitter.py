@@ -30,8 +30,8 @@ import logging
 import tweepy
 from google.appengine.ext import deferred
 from google.appengine.api.labs import taskqueue
-from models import add_profile, monitor_profile
-from models import Monitor
+from datetime import datetime, timedelta
+from models import add_profile, Monitor, Profile
 import sensitive
 
 
@@ -41,8 +41,37 @@ api = tweepy.API(auth)
 
 class UserHandler(webapp.RequestHandler):
 
+  def get_existing_profile(self, raw):
+    if raw.isdecimal():
+      id = int(raw)
+      query = Profile.gql("WHERE id = :id",
+                          id=id)
+      profile = query.get()
+    else:
+      query = Profile.gql("WHERE screen_name = :screen_name",
+                          screen_name=raw)
+      profile = query.get()
+
+    return profile
+
+  def is_recently_monitored(self, profile):
+    query = Monitor.gql("WHERE profile = :profile",
+                        profile=profile)
+    m = query.get()
+    if m is None:
+      return False
+
+    expire_time = m.modified_at + timedelta(minutes=60) # expire in 1 hour.
+    return datetime.utcnow() < expire_time
+
   def post(self):
     id = self.request.get('id')
+
+    # Check if we really need to make request to Twitter.
+    profile = self.get_existing_profile(id)
+    if profile and self.is_recently_monitored(profile):
+      # No need to monitor.
+      return
 
     try:
       user = api.get_user(id=id)
@@ -53,9 +82,7 @@ class UserHandler(webapp.RequestHandler):
       else:
         logging.error("Cannot fetch profile for id %s" % (id))
     else:
-      profile = add_profile(user)
-      if profile:
-        monitor_profile(profile)
+      add_profile(user, True)
 
 
 class FriendHandler(webapp.RequestHandler):
@@ -66,7 +93,7 @@ class FriendHandler(webapp.RequestHandler):
     try:
       for user in tweepy.Cursor(api.friends, id=id, retry_count=3).items():
         # This may take a while, better defer them.
-        deferred.defer(add_profile, user)
+        deferred.defer(add_profile, user, False)
     except tweepy.TweepError:
       r = api.rate_limit_status()
       if r['remaining_hits'] == 0:
@@ -78,16 +105,18 @@ class FriendHandler(webapp.RequestHandler):
 class MonitorHandler(webapp.RequestHandler):
 
   def get(self):
-    q = taskqueue.Queue('twitter')
+    queue = taskqueue.Queue('twitter')
+    query = Monitor.gql("WHERE explicit = :explicit",
+                        explicit=True)
 
-    for m in Monitor.all():
-      id = m.profile_id
+    for m in query:
+      id = m.profile.id
 
       t = taskqueue.Task(url='/twitter/get-user-status', params={'id': id})
-      q.add(t)
+      queue.add(t)
 
       t = taskqueue.Task(url='/twitter/get-friends-statuses', params={'id': id})
-      q.add(t)
+      queue.add(t)
 
 
 def main():
