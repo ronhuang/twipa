@@ -280,7 +280,7 @@ def add_profile(user, explicit=False):
   if m:
     # update modified_at
     m.modified_at = datetime.utcnow()
-    m.explicit = explicit
+    m.explicit |= explicit
   else:
     m = Monitor(
       profile = profile,
