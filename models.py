@@ -117,6 +117,10 @@ def add_image(url):
     logging.error("Failed to retrieve information for image %s" % url)
     logging.error(e)
     return
+  except UnicodeEncodeError, e:
+    logging.error("Failed to retrieve information for image %s" % url)
+    logging.error(e)
+    return
 
   if result.status_code != 200:
     logging.warning("Failed to retrieve information for image %s" % url)
