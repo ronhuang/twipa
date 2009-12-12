@@ -31,7 +31,7 @@ import tweepy
 from google.appengine.ext import deferred
 from google.appengine.api.labs import taskqueue
 from datetime import datetime, timedelta
-from models import add_profile, Monitor, Profile
+from models import add_profile, monitor_profile, Monitor, Profile
 import sensitive
 
 
@@ -67,10 +67,13 @@ class UserHandler(webapp.RequestHandler):
   def post(self):
     id = self.request.get('id')
 
-    # Check if we really need to make request to Twitter.
     profile = self.get_existing_profile(id)
+    if profile:
+      monitor_profile(profile)
+
+    # Check if we really need to make request to Twitter.
     if profile and self.is_recently_monitored(profile):
-      # No need to monitor.
+      # Is recently monitored. Wait until next time.
       return
 
     try:

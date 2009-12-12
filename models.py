@@ -109,6 +109,29 @@ class Monitor(db.Model):
   explicit = db.BooleanProperty(required=True, default=False) # True if monitored explicitly.
 
 
+def monitor_profile(profile):
+  # Monitor profile.
+  query = Monitor.gql("WHERE profile_id = :profile_id",
+                      profile_id=profile.id)
+  m = query.get()
+
+  if m and m.explicit:
+    # Nothing else to do.
+    return
+  elif m:
+    m.explicit = True
+  else:
+    m = Monitor(
+      profile_id = profile.id,
+      explicit = True,
+      )
+
+  try:
+    m.put()
+  except:
+    logging.error("Failed to operate Monitor, id:%s" % profile.id)
+
+
 def add_image(url):
   # Get image information (HEAD)
   try:
