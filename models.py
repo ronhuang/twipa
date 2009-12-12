@@ -133,9 +133,11 @@ def monitor_profile(profile):
 
 
 def add_image(url):
+  qurl = urllib.quote(url.encode('utf-8'))
+
   # Get image information (HEAD)
   try:
-    result = urlfetch.fetch(url, method=urlfetch.HEAD)
+    result = urlfetch.fetch(qurl, method=urlfetch.HEAD)
   except (DeadlineExceededError, DownloadError), e:
     logging.error("Failed to retrieve information for image %s" % url)
     logging.error(e)
@@ -169,7 +171,7 @@ def add_image(url):
   # Image doesn't exist, create new one.
   # First retrieve the content of the image.
   try:
-    result = urlfetch.fetch(url)
+    result = urlfetch.fetch(qurl)
   except (DeadlineExceededError, DownloadError), e:
     logging.error("Cannot fetch image %s" % url)
     logging.error(e)
