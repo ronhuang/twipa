@@ -55,8 +55,8 @@ class UserHandler(webapp.RequestHandler):
     return profile
 
   def is_recently_monitored(self, profile):
-    query = Monitor.gql("WHERE profile = :profile",
-                        profile=profile)
+    query = Monitor.gql("WHERE profile_id = :profile_id",
+                        profile_id=profile.id)
     m = query.get()
     if m is None:
       return False
@@ -110,7 +110,7 @@ class MonitorHandler(webapp.RequestHandler):
                         explicit=True)
 
     for m in query:
-      id = m.profile.id
+      id = m.profile_id
 
       t = taskqueue.Task(url='/twitter/get-user-status', params={'id': id})
       queue.add(t)

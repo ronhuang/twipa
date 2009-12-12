@@ -104,7 +104,7 @@ class Profile(db.Model):
 
 
 class Monitor(db.Model):
-  profile = db.ReferenceProperty(Profile, required=True)
+  profile_id = db.IntegerProperty(required=True)
   modified_at = db.DateTimeProperty(required=True, default=datetime.min)
   explicit = db.BooleanProperty(required=True, default=False) # True if monitored explicitly.
 
@@ -273,8 +273,8 @@ def add_profile(user, explicit=False):
     return
 
   # Monitor profile.
-  query = Monitor.gql("WHERE profile = :profile",
-                      profile=profile)
+  query = Monitor.gql("WHERE profile_id = :profile_id",
+                      profile_id=profile.id)
   m = query.get()
 
   if m:
@@ -283,7 +283,7 @@ def add_profile(user, explicit=False):
     m.explicit |= explicit
   else:
     m = Monitor(
-      profile = profile,
+      profile_id = profile.id,
       modified_at = datetime.utcnow(),
       explicit = explicit,
       )
