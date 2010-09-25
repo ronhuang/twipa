@@ -62,6 +62,10 @@ class MainHandler(webapp.RequestHandler):
         if user:
             page = 'timeline.html'
             data["screen_name"] = user.screen_name
+            data["name"] = user.name
+            data["year"] = user.created_at.year
+            data["month"] = user.created_at.month
+            data["day"] = user.created_at.day
         else:
             page = 'signin.html'
 

@@ -60,7 +60,9 @@
 
     function reload(url) {
       $.getJSON(url, function(data) {
+        eventSource.clear();
         eventSource.loadJSON(data, document.location.href);
+        tl.getBand(0).setCenterVisibleDate(new Date({{year}}, {{month|add:"-1"}}, {{day}}));
       });
     }
 
