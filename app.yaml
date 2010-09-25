@@ -4,10 +4,6 @@ runtime: python
 api_version: 1
 
 handlers:
-# Homepage.
-- url: /
-  script: home.py
-
 # Services.
 - url: /twitter/.*
   script: twitter.py
@@ -25,6 +21,12 @@ handlers:
   static_files: robots.txt
   upload: robots.txt
 
+- url: /css
+  static_dir: css
+
+- url: /img
+  static_dir: img
+
 # Turn on several Google experimental services.
 - url: /_ah/queue/deferred
   script: $PYTHON_LIB/google/appengine/ext/deferred/deferred.py
@@ -33,3 +35,7 @@ handlers:
 - url: /remote_api
   script: $PYTHON_LIB/google/appengine/ext/remote_api/handler.py
   login: admin
+
+# Main services
+- url: .*
+  script: main.py

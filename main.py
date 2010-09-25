@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2009 Ron Huang
+# Copyright (c) 2010 Ron Huang
 #
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -24,118 +24,143 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 
+import os
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp import util
-import os
 from google.appengine.ext.webapp import template
-from google.appengine.api.labs import taskqueue
-from models import Profile
-import logging
+import tweepy
+from tweepy import Cursor
+from configs import CONSUMER_KEY, CONSUMER_SECRET, CALLBACK
+from utils import Cookies
 
 
 class MainHandler(webapp.RequestHandler):
+    def get(self):
+        cookies = Cookies(self)
+        token_key = None
+        token_secret = None
 
-  def get(self):
-    self.response.out.write('Hello world!')
+        if "ulg" in cookies:
+            token_key = cookies["ulg"]
+        if "auau" in cookies:
+            token_secret = cookies["auau"]
 
+        # Check if authorized.
+        user = None
+        if token_key and token_secret:
+            auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
+            auth.set_access_token(token_key, token_secret)
+            api = tweepy.API(auth)
+            user = api.verify_credentials()
 
-class TrackHandler(webapp.RequestHandler):
+        page = None
+        data = {}
+        if user:
+            page = 'timeline.html'
+            data["name"] = user.name
+        else:
+            page = 'signin.html'
 
-  def get(self):
-    path = os.path.join(os.path.dirname(__file__), 'view', 'track.html')
-    self.response.out.write(template.render(path, None))
-
-  def post(self):
-    id = self.request.get('id')
-
-    if len(id) > 0:
-      t = taskqueue.Task(url='/twitter/get-user-status', params={'id': id})
-      taskqueue.Queue('twitter').add(t)
-
-      t = taskqueue.Task(url='/twitter/get-friends-statuses', params={'id': id})
-      taskqueue.Queue('twitter').add(t)
-
-    self.redirect('/track')
-
-
-class ViewHandler(webapp.RequestHandler):
-
-  def get(self):
-    profiles = Profile.all()
-
-    template_values = {
-      'profiles': profiles,
-      'dummy': 'Hello',
-      }
-
-    path = os.path.join(os.path.dirname(__file__), 'view', 'view.html')
-    self.response.out.write(template.render(path, template_values))
+        dirname = os.path.dirname(__file__)
+        path = os.path.join(dirname, 'view', page)
+        self.response.out.write(template.render(path, data))
 
 
-class ImageHandler(webapp.RequestHandler):
+class SignInHandler(webapp.RequestHandler):
+    def get(self):
+        # OAuth dance
+        auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET, CALLBACK)
+        try:
+            url = auth.get_authorization_url()
+        except tweepy.TweepError, e:
+            # Failed to get a request token
+            msg = {'message': e}
+            dirname = os.path.dirname(__file__)
+            path = os.path.join(dirname, 'view', 'error.html')
+            self.response.out.write(template.render(path, msg))
+            return
 
-  def get(self):
-    path = self.request.path[len('/profile_image/'):]
-    sid, revision, size = path.split('/')
-    id = 0
+        # store the request token for later use in the callback page.
+        cookies = Cookies(self)
+        cookies["jkiu"] = auth.request_token.key
+        cookies["jhyu"] = auth.request_token.secret
 
-    try:
-      id = int(sid)
-    except TypeError:
-      logging.error("ID incorrect %s" % sid)
-      self.error(404)
-      return
+        self.redirect(url)
 
-    # TODO: handle revision
 
-    q = Profile.gql("WHERE id = :id "
-                    "ORDER BY modified_at DESC",
-                    id=id)
-    p = q.get()
+class CallbackHandler(webapp.RequestHandler):
+    def get(self):
+        oauth_token = self.request.get("oauth_token", None)
+        oauth_verifier = self.request.get("oauth_verifier", None)
 
-    if p is None:
-      logging.warning("Profile not exist. id:%s, revision:%s, size:%s" % (id, revision, size))
-      self.error(404)
-      return
+        if oauth_token is None:
+            # Invalid request!
+            msg = {'message': 'Missing required parameters!'}
+            dirname = os.path.dirname(__file__)
+            path = os.path.join(dirname, 'view', 'error.html')
+            self.response.out.write(template.render(path, msg))
+            return
 
-    if size == 'original':
-      image = p.original_image
-    elif size == 'bigger':
-      image = p.bigger_image
-    elif size == 'normal':
-      image = p.normal_image
-    elif size == 'mini':
-      image = p.mini_image
-    else:
-      logging.warning("Invalid size. id:%s, revision:%s, size:%s" % (id, revision, size))
-      self.error(404)
-      return
+        # lookup the request token
+        cookies = Cookies(self)
+        token_key = None
+        token_secret = None
 
-    if image is None:
-      # Try normal image is not found
-      image = p.normal_image
+        if "jkiu" in cookies:
+            token_key = cookies["jkiu"]
+            del cookies["jkiu"]
+        if "jhyu" in cookies:
+            token_secret = cookies["jhyu"]
+            del cookies["jhyu"]
 
-    if image is None:
-      # Return 404 if still not found
-      logging.warning("C id:%s, revision:%s, size:%s" % (id, revision, size))
-      self.error(404)
-      return
+        if token_key is None or token_secret is None or oauth_token != token_key:
+            # We do not seem to have this request token, show an error.
+            msg = {'message': 'Invalid token!'}
+            dirname = os.path.dirname(__file__)
+            path = os.path.join(dirname, 'view', 'error.html')
+            self.response.out.write(template.render(path, msg))
+            return
 
-    self.response.headers['Content-Type'] = image.content_type
-    self.response.headers['Content-Disposition'] = "filename=%s" % image.name
-    self.response.out.write(image.content)
+        auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
+        auth.set_request_token(token_key, token_secret)
+
+        # fetch the access token
+        try:
+            auth.get_access_token(oauth_verifier)
+        except tweepy.TweepError, e:
+            # Failed to get access token
+            msg = {'message': e}
+            dirname = os.path.dirname(__file__)
+            path = os.path.join(dirname, 'view', 'error.html')
+            self.response.out.write(template.render(path, msg))
+            return
+
+        # remember on the user browser
+        cookies["ulg"] = auth.access_token.key
+        cookies["auau"] = auth.access_token.secret
+
+        self.redirect("/")
+
+
+class SignOutHandler(webapp.RequestHandler):
+    def get(self):
+        cookies = Cookies(self)
+        del cookies["ulg"]
+        del cookies["auau"]
+
+        self.redirect("/")
 
 
 def main():
-  actions = [
-      ('/', MainHandler),
-      ('/track', TrackHandler),
-      ('/view', ViewHandler),
-      (r'/profile_image/.*', ImageHandler),
-      ]
-  application = webapp.WSGIApplication(actions, debug=True)
-  util.run_wsgi_app(application)
+    actions = [
+        ('/', MainHandler),
+        ('/signin', SignInHandler),
+        ('/callback', CallbackHandler),
+        ('/signout', SignOutHandler),
+        ]
+    application = webapp.WSGIApplication(actions, debug=True)
+    util.run_wsgi_app(application)
 
 
 if __name__ == '__main__':
-  main()
+    main()
