@@ -25,9 +25,11 @@
 
 
 import os
+import re
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp import util
 from google.appengine.ext.webapp import template
+from django.utils import simplejson as json
 import tweepy
 from tweepy import Cursor
 from configs import CONSUMER_KEY, CONSUMER_SECRET, CALLBACK
@@ -151,12 +153,90 @@ class SignOutHandler(webapp.RequestHandler):
         self.redirect("/")
 
 
+class EventsHandler(webapp.RequestHandler):
+    def get(self):
+        etype = None
+        eid = None
+
+        m = re.match("/events/(\w+)/(\d+)", self.request.path)
+        if m:
+            etype = m.group(1)
+            eid = m.group(2)
+
+        if etype is None or eid is None:
+            self.error(404)
+            return
+
+        if etype != "followers":
+            self.error(404)
+            return
+
+        # Retrieve authentication
+        cookies = Cookies(self)
+        token_key = None
+        token_secret = None
+
+        if "ulg" in cookies:
+            token_key = cookies["ulg"]
+        if "auau" in cookies:
+            token_secret = cookies["auau"]
+
+        # Check if authorized.
+        api = None
+        me = None
+        if token_key and token_secret:
+            auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
+            auth.set_access_token(token_key, token_secret)
+            api = tweepy.API(auth)
+            me = api.verify_credentials()
+            if not me:
+                api = None
+
+        if not api:
+            # Not authentication
+            self.error(401)
+            return
+
+        events = []
+        result = {'events': events}
+
+        # Add self.
+        event = {
+            'start': me.created_at.isoformat(),
+            'title': me.name,
+            'image': me.profile_image_url,
+            'link': "http://twitter.com/" + me.screen_name,
+            'description': me.description,
+            'caption': me.screen_name,
+            }
+        events.append(event)
+
+        # Add others.
+        try:
+            for user in Cursor(api.followers).items():
+                event = {
+                    'start': user.created_at.isoformat(),
+                    'title': user.name,
+                    'image': user.profile_image_url,
+                    'link': "http://twitter.com/" + user.screen_name,
+                    'description': user.description,
+                    'caption': user.screen_name,
+                    }
+                events.append(event)
+        except tweepy.TweepError, e:
+            self.error(503)
+            return
+
+        self.response.out.write(json.dumps(result))
+
+
 def main():
     actions = [
         ('/', MainHandler),
         ('/signin', SignInHandler),
         ('/callback', CallbackHandler),
         ('/signout', SignOutHandler),
+        ('/events/.*', EventsHandler),
         ]
     application = webapp.WSGIApplication(actions, debug=True)
     util.run_wsgi_app(application)

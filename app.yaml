@@ -12,6 +12,9 @@ handlers:
 - url: /profile_image/.*
   script: main.py
 
+- url: /events/.*
+  script: main.py
+
 # Static URIs.
 - url: /favicon.ico
   static_files: favicon.ico

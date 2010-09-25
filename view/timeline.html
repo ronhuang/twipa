@@ -10,6 +10,9 @@
     <script type="text/javascript"
             src="http://static.simile.mit.edu/timeline/api-2.3.0/timeline-api.js?bundle=true">
     </script>
+    <script type="text/javascript"
+            src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js">
+    </script>
     <script type="text/javascript">
     var eventSource = new Timeline.DefaultEventSource();
 
@@ -18,14 +21,14 @@
       var bandInfos = [
         Timeline.createBandInfo({
           eventSource: eventSource,
-          width: "70%",
+          width: "80%",
           intervalUnit: Timeline.DateTime.MONTH,
           intervalPixels: 100
         }),
         Timeline.createBandInfo({
           overview: true,
           eventSource: eventSource,
-          width: "30%",
+          width: "20%",
           intervalUnit: Timeline.DateTime.YEAR,
           intervalPixels: 200
         })
@@ -46,13 +49,26 @@
         }, 500);
       }
     }
+
+    function reload(url) {
+      $.getJSON(url, function(data) {
+        eventSource.loadJSON(data, document.location.href);
+      });
+    }
+
+    $(onLoad);
+    $(window).resize(onResize);
+    $(function() {
+      reload('/events/followers/0');
+    });
     </script>
   </head>
-  <body onload="onLoad();" onresize="onResize();">
+  <body>
     <h1>Twitter Profile Timeline</h1>
-    <div>
+    <h2>See when your friends created their Twitter account.</h2>
+    <p>
       Are you {{screen_name}}? If not, please <a href="/signout">sign out</a>.
-    </div>
+    </p>
 
     <div id="my-timeline" style="height: 400px; border: 1px solid #aaa"></div>
     <noscript>
