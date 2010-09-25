@@ -1,4 +1,0 @@
-cron:
-- description: hourly profiles update
-  url: /twitter/monitor-users-statuses
-  schedule: every 12 hours

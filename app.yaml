@@ -4,20 +4,32 @@ runtime: python
 api_version: 1
 
 handlers:
+# Homepage.
+- url: /
+  script: home.py
+
+# Services.
 - url: /twitter/.*
   script: twitter.py
-  login: admin
-
-- url: /_ah/queue/deferred
-  script: $PYTHON_LIB/google/appengine/ext/deferred/deferred.py
   login: admin
 
 - url: /profile_image/.*
   script: main.py
 
+# Static URIs.
+- url: /favicon.ico
+  static_files: favicon.ico
+  upload: favicon.ico
+
+- url: /robots.txt
+  static_files: robots.txt
+  upload: robots.txt
+
+# Turn on several Google experimental services.
+- url: /_ah/queue/deferred
+  script: $PYTHON_LIB/google/appengine/ext/deferred/deferred.py
+  login: admin
+
 - url: /remote_api
   script: $PYTHON_LIB/google/appengine/ext/remote_api/handler.py
   login: admin
-
-- url: .*
-  script: main.py

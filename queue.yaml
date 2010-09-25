@@ -1,4 +1,0 @@
-queue:
-- name: twitter
-  rate: 150/h
-  bucket_size: 20
