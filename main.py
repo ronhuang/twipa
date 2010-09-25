@@ -200,11 +200,11 @@ class EventsHandler(webapp.RequestHandler):
             return
 
         events = []
-        result = {'events': events}
+        result = {'date-time-format': 'iso8601', 'events': events}
 
         # Add self.
         event = {
-            'start': me.created_at.isoformat(),
+            'start': me.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
             'title': me.name,
             'image': me.profile_image_url,
             'link': "http://twitter.com/" + me.screen_name,
@@ -215,9 +215,9 @@ class EventsHandler(webapp.RequestHandler):
 
         # Add others.
         try:
-            for user in Cursor(api.followers).items():
+            for user in Cursor(api.friends).items():
                 event = {
-                    'start': user.created_at.isoformat(),
+                    'start': user.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
                     'title': user.name,
                     'image': user.profile_image_url,
                     'link': "http://twitter.com/" + user.screen_name,
