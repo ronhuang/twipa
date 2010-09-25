@@ -1,6 +1,6 @@
 # Tweepy
-# Copyright 2009 Joshua Roesslein
-# See LICENSE
+# Copyright 2009-2010 Joshua Roesslein
+# See LICENSE for details.
 
 from tweepy.error import TweepError
 
@@ -56,9 +56,10 @@ class CursorIterator(BaseIterator):
     def next(self):
         if self.next_cursor == 0 or (self.limit and self.count == self.limit):
             raise StopIteration
-        data, self.next_cursor, self.prev_cursor = self.method(
+        data, cursors = self.method(
                 cursor=self.next_cursor, *self.args, **self.kargs
         )
+        self.prev_cursor, self.next_cursor = cursors
         if len(data) == 0:
             raise StopIteration
         self.count += 1

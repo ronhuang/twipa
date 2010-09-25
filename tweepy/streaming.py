@@ -1,6 +1,6 @@
 # Tweepy
-# Copyright 2009 Joshua Roesslein
-# See LICENSE
+# Copyright 2009-2010 Joshua Roesslein
+# See LICENSE for details.
 
 import httplib
 from socket import timeout
@@ -9,20 +9,12 @@ from time import sleep
 import urllib
 
 from tweepy.auth import BasicAuthHandler
-from tweepy.parsers import parse_status
+from tweepy.models import Status
 from tweepy.api import API
 from tweepy.error import TweepError
 
-try:
-    import simplejson as json
-except ImportError:
-    try:
-        import json  # Python 2.6+
-    except ImportError:
-        try:
-            from django.utils import simplejson as json  # Google App Engine
-        except ImportError:
-            raise ImportError, "Can't load a json library"
+from tweepy.utils import import_simplejson
+json = import_simplejson()
 
 STREAM_VERSION = 1
 
@@ -40,7 +32,7 @@ class StreamListener(object):
         """
 
         if 'in_reply_to_status_id' in data:
-            status = parse_status(json.loads(data), self.api)
+            status = Status.parse(self.api, json.loads(data))
             if self.on_status(status) is False:
                 return False
         elif 'delete' in data:
@@ -77,7 +69,7 @@ class Stream(object):
     host = 'stream.twitter.com'
 
     def __init__(self, username, password, listener, timeout=5.0, retry_count = None,
-                    retry_time = 10.0, snooze_time = 5.0, buffer_size=1500):
+                    retry_time = 10.0, snooze_time = 5.0, buffer_size=1500, headers=None):
         self.auth = BasicAuthHandler(username, password)
         self.running = False
         self.timeout = timeout
@@ -87,7 +79,7 @@ class Stream(object):
         self.buffer_size = buffer_size
         self.listener = listener
         self.api = API()
-        self.headers = {}
+        self.headers = headers or {}
         self.body = None
 
     def _run(self):
