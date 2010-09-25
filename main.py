@@ -57,7 +57,7 @@ class MainHandler(webapp.RequestHandler):
         data = {}
         if user:
             page = 'timeline.html'
-            data["name"] = user.name
+            data["screen_name"] = user.screen_name
         else:
             page = 'signin.html'
 

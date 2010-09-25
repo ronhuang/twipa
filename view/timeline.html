@@ -7,11 +7,56 @@
           content="See when your friends created their Twitter account." />
     <meta name="keywords" content="twitter, timeline, Ron Huang, ronhuang" />
     <meta name="author" content="Ron Huang" />
+    <script type="text/javascript"
+            src="http://static.simile.mit.edu/timeline/api-2.3.0/timeline-api.js?bundle=true">
+    </script>
+    <script type="text/javascript">
+    var eventSource = new Timeline.DefaultEventSource();
+
+    var tl;
+    function onLoad() {
+      var bandInfos = [
+        Timeline.createBandInfo({
+          eventSource: eventSource,
+          width: "70%",
+          intervalUnit: Timeline.DateTime.MONTH,
+          intervalPixels: 100
+        }),
+        Timeline.createBandInfo({
+          overview: true,
+          eventSource: eventSource,
+          width: "30%",
+          intervalUnit: Timeline.DateTime.YEAR,
+          intervalPixels: 200
+        })
+      ];
+
+      bandInfos[1].syncWith = 0;
+      bandInfos[1].highlight = true;
+
+      tl = Timeline.create(document.getElementById("my-timeline"), bandInfos);
+    }
+
+    var resizeTimerID = null;
+    function onResize() {
+      if (resizeTimerID == null) {
+        resizeTimerID = window.setTimeout(function() {
+          resizeTimerID = null;
+          tl.layout();
+        }, 500);
+      }
+    }
+    </script>
   </head>
-  <body>
+  <body onload="onLoad();" onresize="onResize();">
     <h1>Twitter Profile Timeline</h1>
     <div>
-      Are you {{name}}? If not, please <a href="/signout">sign out</a>.
+      Are you {{screen_name}}? If not, please <a href="/signout">sign out</a>.
     </div>
+
+    <div id="my-timeline" style="height: 400px; border: 1px solid #aaa"></div>
+    <noscript>
+      This page uses Javascript to show you a Timeline. Please enable Javascript in your browser to see the full page. Thank you.
+    </noscript>
   </body>
 </html>
