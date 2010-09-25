@@ -210,6 +210,7 @@ class EventsHandler(webapp.RequestHandler):
             'link': "http://twitter.com/" + me.screen_name,
             'description': me.description,
             'caption': me.screen_name,
+            'classname': 'self',
             }
         events.append(event)
 
