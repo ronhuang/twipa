@@ -25,10 +25,12 @@
 
 
 import os
+import logging
 import re
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp import util
 from google.appengine.ext.webapp import template
+from google.appengine.runtime import DeadlineExceededError
 from django.utils import simplejson as json
 import tweepy
 from tweepy import Cursor
@@ -226,6 +228,10 @@ class EventsHandler(webapp.RequestHandler):
         except tweepy.TweepError, e:
             self.error(503)
             return
+        except DeadlineExceededError, e:
+            # Serialize whatever we have.
+            logging.warning("%s has %d entries, just retrieved %d" % (me.screen_name, me.friends_count, len(events)))
+            pass
 
         self.response.out.write(json.dumps(result))
 
