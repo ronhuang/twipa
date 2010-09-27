@@ -5,13 +5,6 @@ api_version: 1
 
 handlers:
 # Services.
-- url: /twitter/.*
-  script: twitter.py
-  login: admin
-
-- url: /profile_image/.*
-  script: main.py
-
 - url: /events/.*
   script: main.py
 
