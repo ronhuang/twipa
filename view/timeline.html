@@ -16,6 +16,9 @@
     </style>
 
     <script type="text/javascript"
+            src="http://platform.twitter.com/anywhere.js?id=AhuD3lVJmsru5BP1xQPWjA&v=1">
+    </script>
+    <script type="text/javascript"
             src="http://api.simile-widgets.org/timeline/2.3.1/timeline-api.js?bundle=true">
     </script>
     <script type="text/javascript"
@@ -72,15 +75,37 @@
       reload('/events/followers/0');
     });
     </script>
+    <script type="text/javascript">
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-7044154-3']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+    </script>
+    <script type="text/javascript">
+      twttr.anywhere(function (T) {
+        T.hovercards();
+      });
+    </script>
   </head>
   <body>
     <h1>Twitter Profile Timeline</h1>
     <h2>See when your friends created their Twitter account.</h2>
     <p>
-      Are you {{name}}? If not, please <a href="/signout">sign out</a>.
+      Are you @{{screen_name}}? If not, please <a href="/signout">sign out</a>.
     </p>
 
     <div id="my-timeline" style="height:400px; border:1px solid #aaa;"></div>
+    <br/>
+
+    <a href="http://twitter.com/share" class="twitter-share-button"
+       data-count="horizontal" data-via="ronhuang">Tweet</a>
+    <script type="text/javascript" src="http://platform.twitter.com/widgets.js"></script>
+
     <noscript>
       This page uses Javascript to show you a Timeline. Please enable Javascript in your browser to see the full page. Thank you.
     </noscript>
